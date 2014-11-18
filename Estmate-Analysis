@@ -1,0 +1,67 @@
+# The following is an examination of trends in political ideology over time. Estimates of ideology were
+# generated from a Bayesian estimation of the graded response model using R2jags. The estimates were validated
+# using the grm() function in the 'ltm' package. Estimated ideology runs from -2.6 (representing the most 
+# liberal hippie) to 2.6 (representing the most pure conservative)
+
+# Download the Data
+dat2 <- read.csv("http://www.andrewwpierce.com/uploads/2/1/0/7/21071390/irt_ideology.csv")
+
+# Set Colors for Transparent Plotting
+blue <- rgb(0,0,1,a=.5)
+red <- rgb(1,0,0,a=.5)
+
+# Calculate Party Means over Time
+PM <- aggregate(EstID~Year+Party3,data=dat2,FUN=mean)
+
+# Plot Party Means over Time
+plot(PM$EstID[which(PM$Party3==1)] ~ PM$Year[which(PM$Party3==1)],pch=19,col="blue",xlab="Year",ylab="Estimated Mean Ideology",main="Changes in Mean Party Ideology, 1952-2008",ylim=c(-3,3))
+points(PM$EstID[which(PM$Party3==3)] ~ PM$Year[which(PM$Party3==3)],pch=19,col="red")
+abline(lm(PM$EstID[which(PM$Party3==1)] ~ PM$Year[which(PM$Party3==1)]),col="blue",lwd=2) #trend lines
+abline(lm(PM$EstID[which(PM$Party3==3)] ~ PM$Year[which(PM$Party3==3)]),col="red",lwd=2)  #trend lines
+legend("bottomleft",legend=c("Republicans","Democrats"),pch=c(19,19), col=c("red","blue"),bty="n")
+
+# Comapare Estimated Ideology to Self-Reported Ideology
+# First, rescale self-reported ideology measure.
+dat2$SrID <- NA
+dat2$SrID <- dat2$LibCon - 4
+
+# Plot Correlation of Estimated Ideology and Self-Reported Ideology
+plot(jitter(dat2$SrID[which(dat2$Party3==1)]),dat2$EstID[which(dat2$Party3==1)],pch=19,col=rgb(0,0,1,.05),xlab="Self-Reported Ideology",ylab="Estimated Ideology",main="Distribution of Republican and Democratic Identifiers \n by Estimated Ideology",ylim=c(-3,3))
+points(jitter(dat2$SrID[which(dat2$Party3==3)]),dat2$EstID[which(dat2$Party3==3)],pch=19,col=rgb(1,0,0,.05))
+legend("bottomleft",legend=c("Republicans","Democrats"),pch=c(19,19),col=c("red","blue"))
+
+# Plotting Party Densities
+par(mfrow=c(2,2))
+for(i in c(1952,1972,1992,2008)){
+  d1<-density(dat2$EstID[which(dat2$Party3==1 & dat2$Year==i)],na.rm=T,adjust=2)
+  d2<-density(dat2$EstID[which(dat2$Party3==3 & dat2$Year==i)],na.rm=T,adjust=2)
+  plot(d1,lty=1,lwd=3,col=blue,main=paste("Distribution of Estimated Ideology \n",i),xlab="Estimated Ideology",xlim=c(-3.2,3.2),ylim=c(0,2.0), bty="n",yaxt="n",ylab="")
+  polygon(d1,col=blue,border=NA)
+  lines(d2,lwd=3,col=red)
+  polygon(d2,col=red,border=NA)
+}
+
+# Calculate Density Differences
+min.f1f2 <- function(x, mu1, mu2, sd1, sd2) {
+  f1 <- dnorm(x, mean=mu1, sd=sd1)
+  f2 <- dnorm(x, mean=mu2, sd=sd2)
+  pmin(f1, f2)
+}
+e <- 2.71828182845904523536028747135266249775724709369995
+
+denOT <- matrix(c(years,rep(NA,26),rep(NA,26)),length(years),3)
+for(i in 1:length(years)){
+  dens.r <- dat2$EstID[which(dat2$Year==years[i] & dat2$Party3==1)]
+  dens.d <- dat2$EstID[which(dat2$Year==years[i] & dat2$Party3==3)]
+  OVL <- integrate(min.f1f2,mu1=mean(dens.d),mu2=mean(dens.r),sd1=sd(dens.d),sd2=sd(dens.r),lower=-Inf,upper=Inf)
+  sdp2 <- (sd(dens.d)^2)
+  sdq2 <- (sd(dens.r)^2)
+  BC <- 1/e^(.25*log(.25*(sdp2/sdq2+sdq2/sdp2+2))+.25*((mean(dens.d)-mean(dens.r))^2/(sdp2+sdq2)))
+  denOT[i,2] <- OVL$value
+  denOT[i,3] <- BC
+}
+
+# Plot Overlap of Distributions
+plot(denOT[,2]~denOT[,1],main="Coefficient of Overlap between Distributions of \n Republicans and Democrats",xlab="Year",ylab="Proportion of Overlap",pch=19,ylim=c(0,1)) 
+lines(lowess(denOT[,2]~denOT[,1],f=.33),lwd=3)
+legend("bottomleft",legend=c("Loess Smooth"),lwd=3,lty=1,bty="n")
